@@ -4,7 +4,7 @@ emoji: 🚀
 colorFrom: blue
 colorTo: indigo
 sdk: docker
-app_port: 20128
+app_port: 7860
 pinned: false
 ---
 
