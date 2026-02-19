@@ -161,14 +161,22 @@ export default function OnboardingWizard() {
   };
 
   const handleFinish = async () => {
+    setErrorMessage("");
     try {
-      await fetch("/api/settings", {
+      const res = await fetch("/api/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ setupComplete: true }),
       });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setErrorMessage(data.error?.message || data.error || "Failed to complete onboarding.");
+        return;
+      }
     } catch {
-      // Non-critical
+      setErrorMessage("Connection error while finishing onboarding.");
+      return;
     }
     router.push("/dashboard");
   };
@@ -405,6 +413,11 @@ export default function OnboardingWizard() {
           </div>
 
           {/* Footer Actions */}
+          {errorMessage && (
+            <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+              {errorMessage}
+            </div>
+          )}
           <div className="flex items-center justify-between mt-8 pt-6 border-t border-white/[0.06]">
             <div>
               {step > 0 && !isLastStep && (
