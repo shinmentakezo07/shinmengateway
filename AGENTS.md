@@ -104,3 +104,13 @@ overridable via env vars or `data/provider-credentials.json`.
 
 - Provide analysis and suggestions only
 - Focus on bugs, security, performance, and best practices
+
+## Hugging Face Spaces Post-Commit Check
+
+- After every successful git commit, check Hugging Face Spaces logs for this Space:
+  - Runtime logs: `https://huggingface.co/api/spaces/shimen/shinroute/logs/run`
+  - Build logs: `https://huggingface.co/api/spaces/shimen/shinroute/logs/build`
+- Use `HF_TOKEN` from environment for authorization (never hardcode tokens in repo/files).
+- Example commands:
+  - `curl -N -H "Authorization: Bearer $HF_TOKEN" "https://huggingface.co/api/spaces/shimen/shinroute/logs/run"`
+  - `curl -N -H "Authorization: Bearer $HF_TOKEN" "https://huggingface.co/api/spaces/shimen/shinroute/logs/build"`
