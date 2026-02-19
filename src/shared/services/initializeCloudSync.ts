@@ -1,4 +1,5 @@
 import { getCloudSyncScheduler } from "@/shared/services/cloudSyncScheduler";
+import { getHFDatasetBackupScheduler } from "@/shared/services/hfDatasetBackupScheduler";
 import { isCloudEnabled, cleanupProviderConnections } from "@/lib/localDb";
 
 /**
@@ -15,6 +16,10 @@ export async function initializeCloudSync() {
 
     // Start the scheduler
     await scheduler.start();
+
+    // Start HF dataset backup scheduler (enabled only when HF_DATASET_REPO_ID + HF_TOKEN are set)
+    const backupScheduler = await getHFDatasetBackupScheduler(5);
+    await backupScheduler.start();
 
     return scheduler;
   } catch (error) {
