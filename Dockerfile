@@ -30,8 +30,8 @@ COPY --from=builder /app/.next/standalone ./
 
 EXPOSE 7860
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD node -e 'fetch("http://127.0.0.1:" + (process.env.PORT || 7860) + "/api/settings").then(r=>{if(!r.ok)throw r.status}).catch(()=>process.exit(1))'
+HEALTHCHECK --interval=30s --timeout=8s --start-period=45s --retries=5 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:' + (process.env.PORT || 7860) + '/api/settings').then(r=>{if(!r.ok)throw new Error(String(r.status))}).catch(()=>process.exit(1))"]
 
 CMD ["node", "server.js"]
 

@@ -1,6 +1,5 @@
 import path from "node:path";
 import os from "node:os";
-import fs from "node:fs";
 
 export const APP_NAME = "omniroute";
 
@@ -19,30 +18,12 @@ function normalizeConfiguredPath(dir) {
   return path.resolve(trimmed);
 }
 
-function isHuggingFaceSpace() {
-  return Boolean(
-    process.env.SPACE_ID || process.env.HF_SPACE_ID || process.env.SYSTEM === "spaces"
-  );
-}
-
-function getSpacePersistentDataDir() {
-  const persistentRoot = "/data";
-  if (!isHuggingFaceSpace()) return null;
-  if (!fs.existsSync(persistentRoot)) return null;
-  return path.join(persistentRoot, APP_NAME);
-}
-
 export function getLegacyDotDataDir() {
   return path.join(safeHomeDir(), `.${APP_NAME}`);
 }
 
 export function getDefaultDataDir() {
   const homeDir = safeHomeDir();
-
-  const spacePersistentDir = getSpacePersistentDataDir();
-  if (spacePersistentDir) {
-    return spacePersistentDir;
-  }
 
   if (process.platform === "win32") {
     const appData = process.env.APPDATA || path.join(homeDir, "AppData", "Roaming");
