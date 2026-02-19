@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, Input, Button, Toggle } from "@/shared/components";
+import { Card, Input, Button, Toggle, Badge } from "@/shared/components";
 
 interface HFSettings {
   enabled: boolean;
@@ -10,6 +10,14 @@ interface HFSettings {
   username: string;
   branch: string;
   intervalMinutes: number;
+  status?: {
+    lastBackupTime: string | null;
+    lastBackupStatus: "success" | "error" | "never";
+    lastBackupError: string | null;
+    lastRestoreTime: string | null;
+    lastRestoreStatus: "success" | "error" | "never";
+    lastRestoreError: string | null;
+  };
 }
 
 const DEFAULT_SETTINGS: HFSettings = {
@@ -21,10 +29,21 @@ const DEFAULT_SETTINGS: HFSettings = {
   intervalMinutes: 5,
 };
 
+function formatTimestamp(timestamp: string | null) {
+  if (!timestamp) return "Never";
+  try {
+    return new Date(timestamp).toLocaleString();
+  } catch {
+    return "Invalid date";
+  }
+}
+
 export default function HFTab() {
   const [settings, setSettings] = useState<HFSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [backing, setBacking] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const [status, setStatus] = useState<{ type: "" | "success" | "error"; message: string }>({
     type: "",
     message: "",
@@ -77,6 +96,53 @@ export default function HFTab() {
     }
   };
 
+  const runBackup = async () => {
+    setBacking(true);
+    setStatus({ type: "", message: "" });
+    try {
+      const res = await fetch("/api/settings/hf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "backup" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Backup failed");
+      setSettings((prev) => ({ ...prev, status: data.status }));
+      setStatus({ type: "success", message: "Backup completed successfully!" });
+    } catch (error: any) {
+      setStatus({ type: "error", message: error.message || "Backup failed" });
+    } finally {
+      setBacking(false);
+    }
+  };
+
+  const runRestore = async () => {
+    if (!confirm("This will replace all local data with the backup from HF dataset. Continue?")) {
+      return;
+    }
+
+    setRestoring(true);
+    setStatus({ type: "", message: "" });
+    try {
+      const res = await fetch("/api/settings/hf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "restore" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Restore failed");
+      setSettings((prev) => ({ ...prev, status: data.status }));
+      setStatus({
+        type: "success",
+        message: "Restore completed! Please restart the app to apply changes.",
+      });
+    } catch (error: any) {
+      setStatus({ type: "error", message: error.message || "Restore failed" });
+    } finally {
+      setRestoring(false);
+    }
+  };
+
   return (
     <Card>
       <div className="flex items-center gap-3 mb-4">
@@ -86,15 +152,15 @@ export default function HFTab() {
           </span>
         </div>
         <div>
-          <h3 className="text-lg font-semibold">Hugging Face</h3>
-          <p className="text-sm text-text-muted">Configure HF dataset backup from dashboard</p>
+          <h3 className="text-lg font-semibold">Hugging Face Dataset Backup</h3>
+          <p className="text-sm text-text-muted">Free persistent storage for HF Spaces</p>
         </div>
       </div>
 
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <div>
-            <p className="font-medium">Enable HF Dataset Backup</p>
+            <p className="font-medium">Enable Automatic Backup</p>
             <p className="text-sm text-text-muted">
               Snapshot /data/omniroute and push to Hugging Face dataset repository
             </p>
@@ -109,7 +175,7 @@ export default function HFTab() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-border/50">
           <Input
             label="Dataset Repo"
-            placeholder="shimen/shinway"
+            placeholder="username/dataset-name"
             value={settings.repoId}
             onChange={(e) => setSettings((prev) => ({ ...prev, repoId: e.target.value }))}
             disabled={loading || saving}
@@ -117,7 +183,7 @@ export default function HFTab() {
 
           <Input
             label="Username"
-            placeholder="shimen"
+            placeholder="username"
             value={settings.username}
             onChange={(e) => setSettings((prev) => ({ ...prev, username: e.target.value }))}
             disabled={loading || saving}
@@ -154,18 +220,90 @@ export default function HFTab() {
           hint="Needs write access to the dataset repository"
         />
 
+        {settings.status && (
+          <div className="pt-4 border-t border-border/50">
+            <h4 className="text-sm font-medium mb-3">Backup Status</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-text-muted">Last Backup:</span>
+                  <Badge
+                    variant={
+                      settings.status.lastBackupStatus === "success"
+                        ? "success"
+                        : settings.status.lastBackupStatus === "error"
+                          ? "error"
+                          : "default"
+                    }
+                    size="sm"
+                  >
+                    {settings.status.lastBackupStatus}
+                  </Badge>
+                </div>
+                <p className="text-xs text-text-muted">
+                  {formatTimestamp(settings.status.lastBackupTime)}
+                </p>
+                {settings.status.lastBackupError && (
+                  <p className="text-xs text-red-500">{settings.status.lastBackupError}</p>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-text-muted">Last Restore:</span>
+                  <Badge
+                    variant={
+                      settings.status.lastRestoreStatus === "success"
+                        ? "success"
+                        : settings.status.lastRestoreStatus === "error"
+                          ? "error"
+                          : "default"
+                    }
+                    size="sm"
+                  >
+                    {settings.status.lastRestoreStatus}
+                  </Badge>
+                </div>
+                <p className="text-xs text-text-muted">
+                  {formatTimestamp(settings.status.lastRestoreTime)}
+                </p>
+                {settings.status.lastRestoreError && (
+                  <p className="text-xs text-red-500">{settings.status.lastRestoreError}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {status.message && (
           <p className={`text-sm ${status.type === "error" ? "text-red-500" : "text-green-500"}`}>
             {status.message}
           </p>
         )}
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="primary" onClick={save} loading={saving}>
-            Save HF Settings
+            Save Settings
           </Button>
           <Button variant="outline" onClick={load} disabled={saving}>
             Reload
+          </Button>
+          <div className="flex-1" />
+          <Button
+            variant="secondary"
+            onClick={runBackup}
+            loading={backing}
+            disabled={!settings.repoId || !settings.token || saving || restoring}
+          >
+            Backup Now
+          </Button>
+          <Button
+            variant="outline"
+            onClick={runRestore}
+            loading={restoring}
+            disabled={!settings.repoId || !settings.token || saving || backing}
+          >
+            Restore from HF
           </Button>
         </div>
       </div>

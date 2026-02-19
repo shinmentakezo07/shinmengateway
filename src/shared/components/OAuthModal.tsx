@@ -216,6 +216,8 @@ export default function OAuthModal({
       let redirectUri: string;
       if (provider === "codex" || provider === "openai") {
         redirectUri = "http://localhost:1455/auth/callback";
+      } else if (provider === "iflow") {
+        redirectUri = "http://localhost:8080/callback";
       } else {
         const port = window.location.port || (window.location.protocol === "https:" ? "443" : "80");
         redirectUri = `http://localhost:${port}/callback`;

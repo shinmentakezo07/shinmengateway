@@ -1,5 +1,15 @@
 import { QWEN_CONFIG } from "../constants/oauth";
 
+function isWAFBlock(text: string): boolean {
+  return (
+    text.includes("aliyun.com") ||
+    text.includes("alicdn.com") ||
+    text.includes("potential threats to the server") ||
+    text.includes("405") ||
+    text.includes("<!doctype")
+  );
+}
+
 export const qwen = {
   config: QWEN_CONFIG,
   flowType: "device_code",
@@ -20,6 +30,15 @@ export const qwen = {
 
     if (!response.ok) {
       const error = await response.text();
+
+      if (isWAFBlock(error)) {
+        throw new Error(
+          "Qwen OAuth is blocked by Alibaba Cloud WAF. This commonly happens on Hugging Face Spaces. " +
+            "Alternative: Use DashScope API key instead. Get your API key from https://dashscope.console.aliyun.com/ " +
+            "and add it manually via Dashboard → Providers → Add Connection → API Key."
+        );
+      }
+
       throw new Error(`Device code request failed: ${error}`);
     }
 

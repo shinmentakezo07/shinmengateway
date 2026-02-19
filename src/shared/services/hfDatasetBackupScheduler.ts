@@ -66,6 +66,11 @@ async function createArchive(sourceDir: string, outputFile: string) {
   await execFileAsync("tar", ["-czf", outputFile, "-C", sourceDir, "."]);
 }
 
+async function extractArchive(archiveFile: string, targetDir: string) {
+  await fsp.mkdir(targetDir, { recursive: true });
+  await execFileAsync("tar", ["-xzf", archiveFile, "-C", targetDir]);
+}
+
 export interface HFDatasetSettings {
   enabled: boolean;
   repoId: string;
@@ -73,6 +78,15 @@ export interface HFDatasetSettings {
   username: string;
   branch: string;
   intervalMinutes: number;
+}
+
+export interface BackupStatus {
+  lastBackupTime: string | null;
+  lastBackupStatus: "success" | "error" | "never";
+  lastBackupError: string | null;
+  lastRestoreTime: string | null;
+  lastRestoreStatus: "success" | "error" | "never";
+  lastRestoreError: string | null;
 }
 
 function defaultSettings(): HFDatasetSettings {
@@ -123,6 +137,26 @@ export async function saveHFDatasetBackupSettings(
   return merged;
 }
 
+export async function getBackupStatus(): Promise<BackupStatus> {
+  const appSettings = (await getSettings().catch(() => ({}))) as Record<string, unknown>;
+  const stored = (appSettings.hfBackupStatus || {}) as Record<string, unknown>;
+
+  return {
+    lastBackupTime: normalizeText(stored.lastBackupTime) || null,
+    lastBackupStatus: (stored.lastBackupStatus as any) || "never",
+    lastBackupError: normalizeText(stored.lastBackupError) || null,
+    lastRestoreTime: normalizeText(stored.lastRestoreTime) || null,
+    lastRestoreStatus: (stored.lastRestoreStatus as any) || "never",
+    lastRestoreError: normalizeText(stored.lastRestoreError) || null,
+  };
+}
+
+export async function updateBackupStatus(updates: Partial<BackupStatus>): Promise<void> {
+  const current = await getBackupStatus();
+  const merged = { ...current, ...updates };
+  await updateSettings({ hfBackupStatus: merged });
+}
+
 export class HFDatasetBackupScheduler {
   intervalId: ReturnType<typeof setInterval> | null;
   isRunningBackup: boolean;
@@ -145,11 +179,44 @@ export class HFDatasetBackupScheduler {
     };
   }
 
+  async shouldAutoRestore(): Promise<boolean> {
+    const autoRestore = process.env.HF_AUTO_RESTORE_ON_STARTUP;
+    if (autoRestore && autoRestore.toLowerCase() === "false") {
+      return false;
+    }
+
+    const config = await this.getConfig();
+    if (!config.repoId || !config.token) {
+      return false;
+    }
+
+    if (!fs.existsSync(config.dataDir)) {
+      return true;
+    }
+
+    try {
+      const files = await fsp.readdir(config.dataDir);
+      return files.length === 0;
+    } catch {
+      return true;
+    }
+  }
+
   async start() {
     if (this.intervalId) return;
 
     const config = await this.getConfig();
     this.intervalMinutes = config.intervalMinutes;
+
+    if (await this.shouldAutoRestore()) {
+      console.log("[HFDatasetBackup] Data directory empty, attempting auto-restore...");
+      try {
+        await this.runRestore();
+        console.log("[HFDatasetBackup] Auto-restore completed successfully");
+      } catch (error: any) {
+        console.error("[HFDatasetBackup] Auto-restore failed:", error?.message || error);
+      }
+    }
 
     if (!config.enabled) {
       return;
@@ -251,6 +318,11 @@ export class HFDatasetBackupScheduler {
       });
 
       if (!statusOut.trim()) {
+        await updateBackupStatus({
+          lastBackupTime: new Date().toISOString(),
+          lastBackupStatus: "success",
+          lastBackupError: null,
+        });
         return;
       }
 
@@ -264,6 +336,68 @@ export class HFDatasetBackupScheduler {
       );
 
       await runGit(["push", "origin", config.branch], repoDir);
+
+      await updateBackupStatus({
+        lastBackupTime: new Date().toISOString(),
+        lastBackupStatus: "success",
+        lastBackupError: null,
+      });
+
+      console.log("[HFDatasetBackup] Backup completed successfully");
+    } catch (error: any) {
+      await updateBackupStatus({
+        lastBackupTime: new Date().toISOString(),
+        lastBackupStatus: "error",
+        lastBackupError: error.message || String(error),
+      });
+      throw error;
+    } finally {
+      await fsp.rm(tempRoot, { recursive: true, force: true });
+    }
+  }
+
+  async runRestore() {
+    const config = await this.getConfig();
+    if (!config.repoId || !config.token) {
+      throw new Error("HF dataset repo and token are required for restore");
+    }
+
+    const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), "omniroute-hf-restore-"));
+    const repoDir = path.join(tempRoot, "repo");
+    const remote = `https://${encodeURIComponent(config.username)}:${encodeURIComponent(config.token)}@huggingface.co/datasets/${config.repoId}`;
+
+    try {
+      await fsp.mkdir(repoDir, { recursive: true });
+      await runGit(["init"], repoDir);
+      await runGit(["config", "user.name", "omniroute-restore-bot"], repoDir);
+      await runGit(["config", "user.email", "omniroute-restore-bot@local"], repoDir);
+      await runGit(["remote", "add", "origin", remote], repoDir);
+
+      await runGit(["fetch", "--depth", "1", "origin", config.branch], repoDir);
+      await runGit(["checkout", "-B", config.branch, `origin/${config.branch}`], repoDir);
+
+      const archiveFile = path.join(repoDir, "backups", "omniroute-data-latest.tar.gz");
+      if (!fs.existsSync(archiveFile)) {
+        throw new Error("No backup found in HF dataset repository");
+      }
+
+      await fsp.mkdir(config.dataDir, { recursive: true });
+      await extractArchive(archiveFile, config.dataDir);
+
+      await updateBackupStatus({
+        lastRestoreTime: new Date().toISOString(),
+        lastRestoreStatus: "success",
+        lastRestoreError: null,
+      });
+
+      console.log("[HFDatasetBackup] Restore completed successfully");
+    } catch (error: any) {
+      await updateBackupStatus({
+        lastRestoreTime: new Date().toISOString(),
+        lastRestoreStatus: "error",
+        lastRestoreError: error.message || String(error),
+      });
+      throw error;
     } finally {
       await fsp.rm(tempRoot, { recursive: true, force: true });
     }

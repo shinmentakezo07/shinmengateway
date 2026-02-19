@@ -4,6 +4,16 @@ import { getServerCredentials } from "../config/index";
 import { generatePKCE } from "../utils/pkce";
 import { spinner as createSpinner } from "../utils/ui";
 
+function isWAFBlock(text: string): boolean {
+  return (
+    text.includes("aliyun.com") ||
+    text.includes("alicdn.com") ||
+    text.includes("potential threats to the server") ||
+    text.includes("405") ||
+    text.includes("<!doctype")
+  );
+}
+
 /**
  * Qwen OAuth Service
  * Uses Device Code Flow with PKCE
@@ -35,6 +45,17 @@ export class QwenService {
 
     if (!response.ok) {
       const error = await response.text();
+
+      if (isWAFBlock(error)) {
+        throw new Error(
+          "Qwen OAuth is blocked by Alibaba Cloud WAF. This commonly happens on Hugging Face Spaces.\n\n" +
+            "Alternative: Use DashScope API key instead:\n" +
+            "1. Get your API key from https://dashscope.console.aliyun.com/\n" +
+            "2. Add it via: Dashboard → Providers → Add Connection → API Key\n" +
+            "3. Provider: qwen, API Key: sk-xxxxx"
+        );
+      }
+
       throw new Error(`Device code request failed: ${error}`);
     }
 

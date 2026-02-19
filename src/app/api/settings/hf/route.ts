@@ -2,12 +2,15 @@ import { NextResponse } from "next/server";
 import {
   getHFDatasetBackupSettings,
   saveHFDatasetBackupSettings,
+  getBackupStatus,
+  getHFDatasetBackupScheduler,
 } from "@/shared/services/hfDatasetBackupScheduler";
 
 export async function GET() {
   try {
     const settings = await getHFDatasetBackupSettings();
-    return NextResponse.json(settings);
+    const status = await getBackupStatus();
+    return NextResponse.json({ ...settings, status });
   } catch (error: any) {
     return NextResponse.json(
       { error: error.message || "Failed to load HF settings" },
@@ -32,11 +35,40 @@ export async function PUT(request: Request) {
     }
 
     const saved = await saveHFDatasetBackupSettings(body);
-    return NextResponse.json(saved);
+    const status = await getBackupStatus();
+    return NextResponse.json({ ...saved, status });
   } catch (error: any) {
     return NextResponse.json(
       { error: error.message || "Failed to save HF settings" },
       { status: 500 }
     );
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const { action } = body;
+
+    const scheduler = await getHFDatasetBackupScheduler();
+
+    if (action === "backup") {
+      await scheduler.runBackup();
+      const status = await getBackupStatus();
+      return NextResponse.json({ success: true, status });
+    }
+
+    if (action === "restore") {
+      await scheduler.runRestore();
+      const status = await getBackupStatus();
+      return NextResponse.json({ success: true, status });
+    }
+
+    return NextResponse.json(
+      { error: "Invalid action. Use 'backup' or 'restore'" },
+      { status: 400 }
+    );
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || "Operation failed" }, { status: 500 });
   }
 }
