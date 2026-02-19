@@ -18,6 +18,10 @@
 x-common: &common
   restart: unless-stopped
   env_file: .env
+  environment:
+    - PORT=20128
+    - HOSTNAME=0.0.0.0
+    - DATA_DIR=/app/data
   volumes:
     - omniroute-data:/app/data
   healthcheck:
@@ -26,7 +30,7 @@ x-common: &common
         "CMD",
         "node",
         "-e",
-        "fetch('http://127.0.0.1:20128/api/settings').then(r=>{if(!r.ok)throw r.status}).catch(()=>process.exit(1))",
+        "fetch(`http://127.0.0.1:${process.env.PORT || 20128}/api/settings`).then(r=>{if(!r.ok)throw r.status}).catch(()=>process.exit(1))",
       ]
     interval: 30s
     timeout: 5s

@@ -50,6 +50,11 @@ export async function GET() {
       ? "~" + dbFilePath.slice(homeDir.length)
       : dbFilePath;
 
+    const displayDataDir = dataDir.startsWith(homeDir)
+      ? "~" + dataDir.slice(homeDir.length)
+      : dataDir;
+    const usingPersistentData = dataDir.startsWith("/data");
+
     return NextResponse.json({
       driver: "sqlite",
       dbPath: displayPath,
@@ -57,7 +62,8 @@ export async function GET() {
       lastBackupAt,
       backupCount,
       retentionDays: 90,
-      dataDir: dataDir.startsWith(homeDir) ? "~" + dataDir.slice(homeDir.length) : dataDir,
+      dataDir: displayDataDir,
+      usingPersistentData,
     });
   } catch (error) {
     console.error("[API] Error getting storage health:", error);

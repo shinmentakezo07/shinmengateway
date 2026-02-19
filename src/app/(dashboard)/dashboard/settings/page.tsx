@@ -11,6 +11,7 @@ import ProxyTab from "./components/ProxyTab";
 import AppearanceTab from "./components/AppearanceTab";
 import ThinkingBudgetTab from "./components/ThinkingBudgetTab";
 import SystemPromptTab from "./components/SystemPromptTab";
+import HFTab from "./components/HFTab";
 
 import CacheStatsCard from "./components/CacheStatsCard";
 import ResilienceTab from "./components/ResilienceTab";
@@ -22,10 +23,18 @@ const tabs = [
   { id: "routing", label: "Routing", icon: "route" },
   { id: "resilience", label: "Resilience", icon: "electrical_services" },
   { id: "advanced", label: "Advanced", icon: "tune" },
+  { id: "hf", label: "HF", icon: "cloud_upload" },
 ];
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState("general");
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window === "undefined") return "general";
+    const tabFromQuery = new URLSearchParams(window.location.search).get("tab");
+    if (tabFromQuery && tabs.some((tab) => tab.id === tabFromQuery)) {
+      return tabFromQuery;
+    }
+    return "general";
+  });
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -89,6 +98,8 @@ export default function SettingsPage() {
           {activeTab === "resilience" && <ResilienceTab />}
 
           {activeTab === "advanced" && <ProxyTab />}
+
+          {activeTab === "hf" && <HFTab />}
         </div>
 
         {/* App Info */}

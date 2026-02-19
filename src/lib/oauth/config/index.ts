@@ -17,7 +17,10 @@ interface ServerCredentials {
  */
 export function getServerCredentials(): ServerCredentials {
   return {
-    server: process.env.OMNIROUTE_SERVER || process.env.SERVER_URL || "http://localhost:20128",
+    server:
+      process.env.OMNIROUTE_SERVER ||
+      process.env.SERVER_URL ||
+      `http://localhost:${process.env.PORT || 7860}`,
     token: process.env.OMNIROUTE_TOKEN || process.env.CLI_TOKEN || "",
     userId: process.env.OMNIROUTE_USER_ID || process.env.CLI_USER_ID || "cli",
   };

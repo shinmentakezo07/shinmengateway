@@ -124,7 +124,7 @@ export default function KiloToolCard({
 
   const getEffectiveBaseUrl = () => {
     if (customBaseUrl) return customBaseUrl;
-    return baseUrl || "http://localhost:20128";
+    return baseUrl || `http://localhost:${process.env.NEXT_PUBLIC_DEFAULT_PORT || 7860}`;
   };
 
   const handleApply = async () => {

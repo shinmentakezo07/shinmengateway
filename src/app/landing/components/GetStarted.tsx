@@ -54,7 +54,7 @@ export default function GetStarted() {
                 <div>
                   <h4 className="font-bold text-lg">Route Requests</h4>
                   <p className="text-sm text-gray-500 mt-1">
-                    Point your CLI tools to http://localhost:20128
+                    Point your CLI tools to http://localhost:7860
                   </p>
                 </div>
               </div>
@@ -89,10 +89,10 @@ export default function GetStarted() {
                   <span className="text-[#E54D5E]">&gt;</span> Starting OmniRoute...
                   <br />
                   <span className="text-[#E54D5E]">&gt;</span> Server running on{" "}
-                  <span className="text-blue-400">http://localhost:20128</span>
+                  <span className="text-blue-400">http://localhost:7860</span>
                   <br />
                   <span className="text-[#E54D5E]">&gt;</span> Dashboard:{" "}
-                  <span className="text-blue-400">http://localhost:20128/dashboard</span>
+                  <span className="text-blue-400">http://localhost:7860/dashboard</span>
                   <br />
                   <span className="text-green-400">&gt;</span> Ready to route! ✓
                 </div>

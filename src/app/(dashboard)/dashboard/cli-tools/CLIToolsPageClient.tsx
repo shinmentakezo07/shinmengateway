@@ -144,7 +144,7 @@ export default function CLIToolsPageClient({ machineId }) {
     if (typeof window !== "undefined") {
       return window.location.origin;
     }
-    return "http://localhost:20128";
+    return `http://localhost:${process.env.NEXT_PUBLIC_DEFAULT_PORT || 7860}`;
   };
 
   if (loading || !statusesLoaded) {

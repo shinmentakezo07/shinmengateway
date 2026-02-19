@@ -17,7 +17,8 @@ LABEL org.opencontainers.image.title="omniroute" \
   org.opencontainers.image.licenses="MIT"
 
 ENV NODE_ENV=production
-ENV PORT=20128
+# HF Spaces expects container apps on 7860 by default; compose overrides to 20128 for local/prod.
+ENV PORT=7860
 ENV HOSTNAME=0.0.0.0
 
 # Runtime writable location for localDb when DATA_DIR is configured to /app/data
@@ -27,10 +28,10 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/.next/standalone ./
 
-EXPOSE 20128
+EXPOSE 7860
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:20128/api/settings').then(r=>{if(!r.ok)throw r.status}).catch(()=>process.exit(1))"
+  CMD node -e "fetch(`http://127.0.0.1:${process.env.PORT || 7860}/api/settings`).then(r=>{if(!r.ok)throw r.status}).catch(()=>process.exit(1))"
 
 CMD ["node", "server.js"]
 

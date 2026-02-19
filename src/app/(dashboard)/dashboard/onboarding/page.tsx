@@ -396,7 +396,9 @@ export default function OnboardingWizard() {
                 </p>
                 <div className="bg-white/[0.03] rounded-xl p-4 border border-white/[0.06] text-left">
                   <p className="text-xs text-text-muted mb-2 font-medium">Your endpoint:</p>
-                  <code className="text-sm text-primary">http://localhost:20128/api/v1</code>
+                  <code className="text-sm text-primary">
+                    {`http://localhost:${process.env.NEXT_PUBLIC_DEFAULT_PORT || 7860}/api/v1`}
+                  </code>
                 </div>
               </div>
             )}

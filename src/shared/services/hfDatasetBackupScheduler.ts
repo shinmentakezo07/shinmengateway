@@ -5,35 +5,57 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { resolveDataDir } from "@/lib/dataPaths";
+import { getSettings, updateSettings } from "@/lib/localDb";
 
 const execFileAsync = promisify(execFile);
 
 const DEFAULT_INTERVAL_MINUTES = 5;
 const DEFAULT_BRANCH = "main";
+const DEFAULT_DATASET_REPO = "shimen/shinway";
 
-function getRepoId() {
-  return process.env.HF_DATASET_REPO_ID || process.env.HF_DATASET_REPO || "shimen/shinway";
+function getEnvRepoId() {
+  return process.env.HF_DATASET_REPO_ID || process.env.HF_DATASET_REPO || DEFAULT_DATASET_REPO;
 }
 
-function getToken() {
+function getEnvToken() {
   return process.env.HF_TOKEN || process.env.HUGGING_FACE_HUB_TOKEN || "";
 }
 
-function getUsername(repoId: string) {
+function getEnvUsername(repoId: string) {
   if (process.env.HF_USERNAME) return process.env.HF_USERNAME;
   const [owner] = repoId.split("/");
   return owner || "hf";
 }
 
-function isEnabled() {
+function getEnvEnabled() {
   const flag = (process.env.HF_DATASET_BACKUP_ENABLED || "true").toLowerCase();
   return flag !== "false";
 }
 
-function getIntervalMinutes() {
+function getEnvIntervalMinutes() {
   const raw = Number(process.env.HF_DATASET_BACKUP_INTERVAL_MINUTES || DEFAULT_INTERVAL_MINUTES);
   if (Number.isNaN(raw) || raw <= 0) return DEFAULT_INTERVAL_MINUTES;
   return raw;
+}
+
+function normalizeInterval(value: unknown, fallback: number) {
+  const parsed = Number(value);
+  if (Number.isNaN(parsed) || parsed <= 0) return fallback;
+  return parsed;
+}
+
+function normalizeText(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeBoolean(value: unknown, fallback: boolean) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+  }
+  return fallback;
 }
 
 async function runGit(args: string[], cwd: string) {
@@ -44,30 +66,81 @@ async function createArchive(sourceDir: string, outputFile: string) {
   await execFileAsync("tar", ["-czf", outputFile, "-C", sourceDir, "."]);
 }
 
+export interface HFDatasetSettings {
+  enabled: boolean;
+  repoId: string;
+  token: string;
+  username: string;
+  branch: string;
+  intervalMinutes: number;
+}
+
+function defaultSettings(): HFDatasetSettings {
+  const repoId = getEnvRepoId();
+  return {
+    enabled: getEnvEnabled(),
+    repoId,
+    token: getEnvToken(),
+    username: getEnvUsername(repoId),
+    branch: process.env.HF_DATASET_BACKUP_BRANCH || DEFAULT_BRANCH,
+    intervalMinutes: getEnvIntervalMinutes(),
+  };
+}
+
+export async function getHFDatasetBackupSettings(): Promise<HFDatasetSettings> {
+  const defaults = defaultSettings();
+  const appSettings = (await getSettings().catch(() => ({}))) as Record<string, unknown>;
+  const stored = (appSettings.hfDatasetBackup || {}) as Record<string, unknown>;
+
+  const repoId = normalizeText(stored.repoId) || defaults.repoId;
+  const token = normalizeText(stored.token) || defaults.token;
+
+  return {
+    enabled: normalizeBoolean(stored.enabled, defaults.enabled),
+    repoId,
+    token,
+    username: normalizeText(stored.username) || getEnvUsername(repoId),
+    branch: normalizeText(stored.branch) || defaults.branch,
+    intervalMinutes: normalizeInterval(stored.intervalMinutes, defaults.intervalMinutes),
+  };
+}
+
+export async function saveHFDatasetBackupSettings(
+  updates: Partial<HFDatasetSettings>
+): Promise<HFDatasetSettings> {
+  const current = await getHFDatasetBackupSettings();
+
+  const merged: HFDatasetSettings = {
+    enabled: normalizeBoolean(updates.enabled, current.enabled),
+    repoId: normalizeText(updates.repoId) || current.repoId,
+    token: normalizeText(updates.token) || current.token,
+    username: normalizeText(updates.username) || current.username,
+    branch: normalizeText(updates.branch) || current.branch,
+    intervalMinutes: normalizeInterval(updates.intervalMinutes, current.intervalMinutes),
+  };
+
+  await updateSettings({ hfDatasetBackup: merged });
+  return merged;
+}
+
 export class HFDatasetBackupScheduler {
   intervalId: ReturnType<typeof setInterval> | null;
   isRunningBackup: boolean;
   intervalMinutes: number;
 
-  constructor(intervalMinutes = getIntervalMinutes()) {
+  constructor(intervalMinutes = getEnvIntervalMinutes()) {
     this.intervalId = null;
     this.isRunningBackup = false;
     this.intervalMinutes = intervalMinutes;
   }
 
-  getConfig() {
-    const repoId = getRepoId();
-    const token = getToken();
-    const username = getUsername(repoId);
-    const branch = process.env.HF_DATASET_BACKUP_BRANCH || DEFAULT_BRANCH;
+  async getConfig() {
+    const settings = await getHFDatasetBackupSettings();
     const dataDir = resolveDataDir({ isCloud: false });
 
     return {
-      enabled: isEnabled() && Boolean(repoId) && Boolean(token),
-      repoId,
-      token,
-      username,
-      branch,
+      ...settings,
+      enabled: settings.enabled && Boolean(settings.repoId) && Boolean(settings.token),
       dataDir,
     };
   }
@@ -75,7 +148,9 @@ export class HFDatasetBackupScheduler {
   async start() {
     if (this.intervalId) return;
 
-    const config = this.getConfig();
+    const config = await this.getConfig();
+    this.intervalMinutes = config.intervalMinutes;
+
     if (!config.enabled) {
       return;
     }
@@ -118,7 +193,7 @@ export class HFDatasetBackupScheduler {
   }
 
   async runBackup() {
-    const config = this.getConfig();
+    const config = await this.getConfig();
     if (!config.enabled) return;
 
     if (!fs.existsSync(config.dataDir)) {
@@ -201,7 +276,7 @@ export class HFDatasetBackupScheduler {
 
 let backupScheduler: HFDatasetBackupScheduler | null = null;
 
-export async function getHFDatasetBackupScheduler(intervalMinutes = getIntervalMinutes()) {
+export async function getHFDatasetBackupScheduler(intervalMinutes = getEnvIntervalMinutes()) {
   if (!backupScheduler) {
     backupScheduler = new HFDatasetBackupScheduler(intervalMinutes);
   }

@@ -8,7 +8,7 @@ const os = require("os");
 // Configuration
 const TARGET_HOST = "daily-cloudcode-pa.googleapis.com";
 const LOCAL_PORT = 443;
-const ROUTER_URL = "http://localhost:20128/v1/chat/completions";
+const ROUTER_URL = `http://localhost:${process.env.PORT || 7860}/v1/chat/completions`;
 const API_KEY = process.env.ROUTER_API_KEY;
 const DB_FILE = path.join(os.homedir(), ".omniroute", "db.json");
 const SQLITE_FILE = path.join(os.homedir(), ".omniroute", "storage.sqlite");

@@ -21,9 +21,18 @@ export default function SystemStorageTab() {
   const [storageHealth, setStorageHealth] = useState({
     driver: "sqlite",
     dbPath: "~/.omniroute/storage.sqlite",
+    dataDir: "~/.omniroute",
+    usingPersistentData: false,
     sizeBytes: 0,
     retentionDays: 90,
     lastBackupAt: null,
+  });
+  const [hfStatus, setHfStatus] = useState({
+    enabled: false,
+    repoId: "",
+    intervalMinutes: 5,
+    tokenConfigured: false,
+    loading: true,
   });
 
   const loadBackups = async () => {
@@ -47,6 +56,30 @@ export default function SystemStorageTab() {
       setStorageHealth((prev) => ({ ...prev, ...data }));
     } catch (err) {
       console.error("Failed to fetch storage health:", err);
+    }
+  };
+
+  const loadHFStatus = async () => {
+    setHfStatus((prev) => ({ ...prev, loading: true }));
+    try {
+      const res = await fetch("/api/settings/hf");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load HF status");
+      setHfStatus({
+        enabled: !!data.enabled,
+        repoId: data.repoId || "",
+        intervalMinutes: Number(data.intervalMinutes || 5),
+        tokenConfigured: !!data.token,
+        loading: false,
+      });
+    } catch {
+      setHfStatus({
+        enabled: false,
+        repoId: "",
+        intervalMinutes: 5,
+        tokenConfigured: false,
+        loading: false,
+      });
     }
   };
 
@@ -107,6 +140,7 @@ export default function SystemStorageTab() {
 
   useEffect(() => {
     loadStorageHealth();
+    loadHFStatus();
   }, []);
 
   const handleExport = async () => {
@@ -225,7 +259,11 @@ export default function SystemStorageTab() {
         </div>
         <div className="flex-1">
           <h3 className="text-lg font-semibold">System & Storage</h3>
-          <p className="text-xs text-text-muted">All data stored locally on your machine</p>
+          <p className="text-xs text-text-muted">
+            {storageHealth.usingPersistentData
+              ? "Persistent storage active (/data)"
+              : "Local storage mode"}
+          </p>
         </div>
         <Badge variant="success" size="sm">
           {storageHealth.driver || "json"}
@@ -233,7 +271,7 @@ export default function SystemStorageTab() {
       </div>
 
       {/* Storage info grid */}
-      <div className="grid grid-cols-2 gap-3 mb-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
         <div className="p-3 rounded-lg bg-bg border border-border">
           <p className="text-[11px] text-text-muted uppercase tracking-wide mb-1">Database Path</p>
           <p className="text-sm font-mono text-text-main break-all">
@@ -241,8 +279,46 @@ export default function SystemStorageTab() {
           </p>
         </div>
         <div className="p-3 rounded-lg bg-bg border border-border">
+          <p className="text-[11px] text-text-muted uppercase tracking-wide mb-1">Data Directory</p>
+          <p className="text-sm font-mono text-text-main break-all">{storageHealth.dataDir}</p>
+        </div>
+        <div className="p-3 rounded-lg bg-bg border border-border">
           <p className="text-[11px] text-text-muted uppercase tracking-wide mb-1">Database Size</p>
           <p className="text-sm font-mono text-text-main">{formatBytes(storageHealth.sizeBytes)}</p>
+        </div>
+      </div>
+
+      <div className="p-3 rounded-lg bg-bg border border-border mb-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium">Hugging Face Backup</p>
+            <p className="text-xs text-text-muted mt-0.5">
+              {hfStatus.loading
+                ? "Loading HF status..."
+                : hfStatus.enabled
+                  ? `Enabled • ${hfStatus.repoId || "No repo"} • every ${hfStatus.intervalMinutes} min`
+                  : "Disabled"}
+            </p>
+            {!hfStatus.loading && (
+              <p className="text-xs text-text-muted mt-1">
+                Token: {hfStatus.tokenConfigured ? "Configured" : "Not configured"}
+              </p>
+            )}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (typeof window !== "undefined") {
+                window.location.assign("/dashboard/settings?tab=hf");
+              }
+            }}
+          >
+            <span className="material-symbols-outlined text-[14px] mr-1" aria-hidden="true">
+              open_in_new
+            </span>
+            Open HF Settings
+          </Button>
         </div>
       </div>
 
